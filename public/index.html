@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Portfolio Risk Scorer</title>
+<style>
+  :root{
+    --bg:#eef1f5; --panel:#ffffff; --ink:#14213d; --muted:#5b6578; --line:#d5dbe5;
+    --low:#0f766e; --mod:#b45309; --high:#b91c1c; --brand:#14213d;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1624; --panel:#18233a; --ink:#e8edf6; --muted:#9aa6bd; --line:#2c3a57; --low:#2dd4bf; --mod:#fbbf24; --high:#f87171; --brand:#e8edf6; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:920px;margin:0 auto;padding:32px 20px 64px}
+  h1{font-size:2rem;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 28px;max-width:60ch}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;margin-bottom:20px}
+  h2{font-size:1.1rem;margin:0 0 14px}
+  label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+  input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+  input:focus,select:focus,button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+  .row{display:grid;grid-template-columns:1.1fr 1.3fr .8fr auto;gap:10px;margin-bottom:10px;align-items:end}
+  button{font:inherit;cursor:pointer;border-radius:6px;padding:9px 16px;border:1px solid var(--brand);background:var(--brand);color:var(--bg);font-weight:600}
+  button.ghost{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500}
+  .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+  .total{margin-left:auto;color:var(--muted);font-size:.9rem}
+  .total.bad{color:var(--high);font-weight:600}
+  .error{color:var(--high);margin-top:12px;font-weight:600}
+  /* Gauge: the one memorable element */
+  .gauge{position:relative;height:18px;border-radius:9px;background:linear-gradient(90deg,var(--low) 0 35%,var(--mod) 35% 60%,var(--high) 60% 100%);margin:34px 0 8px}
+  .needle{position:absolute;top:-10px;width:4px;height:38px;background:var(--ink);border-radius:2px;transform:translateX(-50%);transition:left .6s ease}
+  .scale{display:flex;justify-content:space-between;color:var(--muted);font-size:.8rem}
+  .headline{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .big{font-size:3.2rem;font-weight:700;line-height:1;letter-spacing:-.03em}
+  .level{font-size:1.2rem;font-weight:700}
+  .Low{color:var(--low)} .Moderate{color:var(--mod)} .High{color:var(--high)}
+  .bars{display:grid;gap:12px;margin-top:22px}
+  .bar .top{display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:4px}
+  .track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+  .fill{height:100%;background:var(--brand);border-radius:4px;transition:width .6s ease}
+  ul{padding-left:20px;margin:8px 0 0}
+  .hist{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+  .hist:first-of-type{border-top:0}
+  .hist small{color:var(--muted)}
+  .hidden{display:none}
+  @media (max-width:640px){.row{grid-template-columns:1fr 1fr}.row .rm{grid-column:span 2}}
+  @media (prefers-reduced-motion:reduce){.needle,.fill{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Stock Portfolio Risk Scorer</h1>
+  <p class="sub">Enter a mock portfolio and get a risk score from 0 to 100, based on volatility, sector concentration and diversification.</p>
+
+  <section>
+    <h2>Your portfolio</h2>
+    <label for="pname">Portfolio name</label>
+    <input id="pname" placeholder="e.g. My growth portfolio" maxlength="60" style="margin-bottom:16px">
+    <div id="rows"></div>
+    <div class="actions">
+      <button class="ghost" id="add" type="button">Add holding</button>
+      <button class="ghost" id="sample" type="button">Load sample</button>
+      <span class="total" id="total">Total: 0%</span>
+    </div>
+    <div class="actions"><button id="go" type="button">Score portfolio</button></div>
+    <div class="error hidden" id="err" role="alert"></div>
+  </section>
+
+  <section id="result" class="hidden" aria-live="polite">
+    <h2 id="rname"></h2>
+    <div class="headline"><span class="big" id="score"></span><span class="level" id="level"></span></div>
+    <div class="gauge"><div class="needle" id="needle" style="left:0%"></div></div>
+    <div class="scale"><span>0 Low</span><span>35</span><span>60</span><span>100 High</span></div>
+    <div class="bars" id="bars"></div>
+    <h2 style="margin-top:24px">Sector mix</h2>
+    <div class="bars" id="sectors"></div>
+    <h2 style="margin-top:24px">What to improve</h2>
+    <ul id="tips"></ul>
+    <p class="sub" id="saved" style="margin:16px 0 0;font-size:.85rem"></p>
+  </section>
+
+  <section>
+    <h2>Recent assessments</h2>
+    <div id="history"><span class="sub">Nothing saved yet. Score a portfolio to see it here.</span></div>
+  </section>
+</main>
+
+<script>
+const SECTORS = ["Technology","Finance","Healthcare","Energy","Consumer","Utilities","Industrials","Other"];
+const $ = (id) => document.getElementById(id);
+
+function addRow(t = "", s = "Technology", w = "") {
+  const d = document.createElement("div");
+  d.className = "row";
+  d.innerHTML = `
+    <div><label>Ticker</label><input class="t" value="${t}" placeholder="AAPL" maxlength="6"></div>
+    <div><label>Sector</label><select class="s">${SECTORS.map(x => `<option ${x===s?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div><label>Weight (%)</label><input class="w" type="number" min="0" max="100" step="0.1" value="${w}"></div>
+    <div class="rm"><button class="ghost" type="button">Remove</button></div>`;
+  d.querySelector("button").onclick = () => { d.remove(); updateTotal(); };
+  d.querySelector(".w").oninput = updateTotal;
+  $("rows").appendChild(d);
+  updateTotal();
+}
+function holdings() {
+  return [...document.querySelectorAll("#rows .row")].map(r => ({
+    ticker: r.querySelector(".t").value.trim(),
+    sector: r.querySelector(".s").value,
+    weight: Number(r.querySelector(".w").value),
+  }));
+}
+function updateTotal() {
+  const t = holdings().reduce((s, h) => s + (h.weight || 0), 0);
+  const el = $("total");
+  el.textContent = `Total: ${Math.round(t * 10) / 10}%`;
+  el.className = "total" + (Math.abs(t - 100) > 0.5 ? " bad" : "");
+}
+function showError(m) { const e = $("err"); e.textContent = m || ""; e.classList.toggle("hidden", !m); }
+
+function bar(label, val, suffix = "") {
+  return `<div class="bar"><div class="top"><span>${label}</span><span>${val}${suffix}</span></div>
+          <div class="track"><div class="fill" style="width:${Math.min(100, val)}%"></div></div></div>`;
+}
+function render(rec) {
+  const r = rec.result;
+  $("result").classList.remove("hidden");
+  $("rname").textContent = rec.name;
+  $("score").textContent = r.overall;
+  $("level").textContent = r.level + " risk";
+  $("level").className = "level " + r.level;
+  $("needle").style.left = r.overall + "%";
+  $("bars").innerHTML =
+    bar("Volatility (avg " + r.avgVolatility + "% a year)", r.breakdown.volatility) +
+    bar("Sector concentration", r.breakdown.concentration) +
+    bar("Low diversification", r.breakdown.diversification);
+  $("sectors").innerHTML = Object.entries(r.sectors).map(([k, v]) => bar(k, v, "%")).join("");
+  $("tips").innerHTML = r.tips.map(t => `<li>${t}</li>`).join("");
+  $("saved").textContent = rec.saved === false ? "This result could not be saved." : "Saved to your history.";
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+
+async function score() {
+  showError("");
+  const btn = $("go"); btn.disabled = true; btn.textContent = "Scoring…";
+  try {
+    const res = await fetch("/api/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("pname").value.trim(), holdings: holdings() }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showError(data.error || "Something went wrong.");
+    render(data); loadHistory();
+  } catch { showError("Could not reach the server. Check your connection and try again."); }
+  finally { btn.disabled = false; btn.textContent = "Score portfolio"; }
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch("/api/score");
+    if (!res.ok) return;
+    const items = await res.json();
+    if (!items.length) return;
+    $("history").innerHTML = items.map(i => `
+      <div class="hist" data-id="${i.id}">
+        <div><strong>${i.name.replace(/</g,"&lt;")}</strong><br><small>${new Date(i.createdAt).toLocaleString()}</small></div>
+        <div class="level ${i.result.level}">${i.result.overall} · ${i.result.level}</div>
+      </div>`).join("");
+    document.querySelectorAll(".hist").forEach(el => el.onclick = async () => {
+      const r = await fetch("/api/score?id=" + el.dataset.id);
+      if (r.ok) render(await r.json());
+    });
+  } catch {}
+}
+
+$("add").onclick = () => addRow();
+$("go").onclick = score;
+$("sample").onclick = () => {
+  $("rows").innerHTML = ""; $("pname").value = "Sample portfolio";
+  [["AAPL","Technology",30],["JPM","Finance",25],["JNJ","Healthcare",20],["KO","Consumer",15],["XOM","Energy",10]]
+    .forEach(a => addRow(...a));
+};
+addRow(); addRow(); addRow();
+loadHistory();
+</script>
+</body>
+</html>

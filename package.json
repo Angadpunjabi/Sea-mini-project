@@ -1,0 +1,9 @@
+{
+  "name": "stock-portfolio-risk-scorer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless Stock Portfolio Risk Scorer (SE&A mini-project)",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
